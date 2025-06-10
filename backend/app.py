@@ -5,7 +5,6 @@ import os
 import logging
 import re
 from dotenv import load_dotenv
-import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +17,8 @@ load_dotenv()
 # Configuration
 API_KEY = os.getenv('VEXT_API_KEY')
 CHANNEL_TOKEN = os.getenv('CHANNEL_TOKEN')
-ENVIRONMENT = 'dev'
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')  # Default to production for Render
+PORT = int(os.getenv('PORT', 5000))  # Render provides PORT environment variable
 
 # External API endpoint
 EXTERNAL_API_URL = f'https://payload.vextapp.com/hook/AKEIS1C8PZ/catch/{CHANNEL_TOKEN}'
@@ -63,10 +63,23 @@ def format_text_response(text):
     
     return text
 
+@app.route('/', methods=['GET'])
+def home():
+    """Root endpoint for health check"""
+    return jsonify({
+        "status": "online",
+        "service": "chatbot-bridge",
+        "environment": ENVIRONMENT
+    }), 200
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "chatbot-bridge"}), 200
+    return jsonify({
+        "status": "healthy", 
+        "service": "chatbot-bridge",
+        "environment": ENVIRONMENT
+    }), 200
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -79,7 +92,7 @@ def chat():
         
         if not data or 'message' not in data:
             logger.error("No message provided in request")
-            return "Error: No message provided", 400
+            return jsonify({"error": "No message provided"}), 400
         
         user_message = data['message']
         logger.info(f"Received message: {user_message}")
@@ -127,35 +140,41 @@ def chat():
                 return response_text, 200
         else:
             logger.error(f"External API error: {response.status_code} - {response.text}")
-            return f"External API error: {response.status_code}", response.status_code
+            return jsonify({"error": f"External API error: {response.status_code}"}), response.status_code
             
     except requests.exceptions.Timeout:
         logger.error("Request to external API timed out")
-        return "Request timed out. Please try again.", 408
+        return jsonify({"error": "Request timed out. Please try again."}), 408
     
     except requests.exceptions.ConnectionError:
         logger.error("Connection error to external API")
-        return "Connection error. Please check your internet connection.", 503
+        return jsonify({"error": "Connection error. Please check your internet connection."}), 503
     
     except requests.exceptions.RequestException as e:
         logger.error(f"Request error: {str(e)}")
-        return f"Request error: {str(e)}", 500
+        return jsonify({"error": f"Request error: {str(e)}"}), 500
     
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        return f"Internal server error: {str(e)}", 500
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/config', methods=['GET'])
 def get_config():
     """
-    Get current configuration (for debugging - don't expose API keys)
+    Get current configuration (for debugging - don't expose sensitive data in production)
     """
-    return jsonify({
-        "environment": ENVIRONMENT,
-        "api_key": API_KEY,
-        "channel_token": CHANNEL_TOKEN,
-        "external_url": EXTERNAL_API_URL
-    })
+    if ENVIRONMENT == 'production':
+        return jsonify({
+            "environment": ENVIRONMENT,
+            "status": "API keys configured" if API_KEY and CHANNEL_TOKEN else "API keys missing"
+        })
+    else:
+        return jsonify({
+            "environment": ENVIRONMENT,
+            "api_key_configured": bool(API_KEY),
+            "channel_token_configured": bool(CHANNEL_TOKEN),
+            "external_url": EXTERNAL_API_URL
+        })
 
 @app.errorhandler(404)
 def not_found(error):
@@ -167,14 +186,17 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Check configuration on startup
-    if CHANNEL_TOKEN == 'your-channel-token-here':
-        logger.warning("CHANNEL_TOKEN not configured! Replace with your actual channel token.")
-    else:
+    if not API_KEY:
+        logger.error("VEXT_API_KEY environment variable not set!")
+    if not CHANNEL_TOKEN:
+        logger.error("CHANNEL_TOKEN environment variable not set!")
+    
+    if API_KEY and CHANNEL_TOKEN:
         logger.info("Configuration loaded successfully")
     
-    logger.info(f"Starting Flask app on port 5000")
+    logger.info(f"Starting Flask app on port {PORT}")
     logger.info(f"Environment: {ENVIRONMENT}")
     logger.info(f"External API URL: {EXTERNAL_API_URL}")
     
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Run the Flask app (Render handles the host and port)
+    app.run(host='0.0.0.0', port=PORT, debug=(ENVIRONMENT != 'production'))
