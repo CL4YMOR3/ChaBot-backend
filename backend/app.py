@@ -4,6 +4,8 @@ import requests
 import os
 import logging
 import re
+from dotenv import load_dotenv
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -11,10 +13,11 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend communication
+load_dotenv()
 
 # Configuration
-API_KEY = 'csVGSJWN.M39EMqpKXoPakNR2PVpeyDoaMvC75CRJ'
-CHANNEL_TOKEN = 'your-channel-token-here'  # Replace with your actual channel token
+API_KEY = os.getenv('VEXT_API_KEY')
+CHANNEL_TOKEN = os.getenv('CHANNEL_TOKEN')
 ENVIRONMENT = 'dev'
 
 # External API endpoint
