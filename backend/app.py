@@ -21,7 +21,11 @@ ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')  # Default to production fo
 PORT = int(os.getenv('PORT', 5000))  # Render provides PORT environment variable
 
 # External API endpoint
-EXTERNAL_API_URL = f'https://payload.vextapp.com/hook/AKEIS1C8PZ/catch/{CHANNEL_TOKEN}'
+# Handle case where CHANNEL_TOKEN might contain the full URL or just the token
+if CHANNEL_TOKEN and CHANNEL_TOKEN.startswith('https://'):
+    EXTERNAL_API_URL = CHANNEL_TOKEN
+else:
+    EXTERNAL_API_URL = f'https://payload.vextapp.com/hook/AKEIS1C8PZ/catch/{CHANNEL_TOKEN}'
 
 def format_text_response(text):
     """
